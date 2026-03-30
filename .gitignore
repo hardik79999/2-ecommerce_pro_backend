@@ -1,0 +1,41 @@
+# ========================
+# 1. Environment Variables
+# ========================
+# Ise KABHI push nahi karna, isme DB password aur Email OTP ke secrets honge!
+.env
+
+# ========================
+# 2. Virtual Environment
+# ========================
+# Ye har developer apne PC pe alag banata hai, ise repo me nahi daalte
+.venv/
+venv/
+env/
+
+# ========================
+# 3. Python Cache Files
+# ========================
+# Python jab run hota hai toh ye kachra (cache) banata hai
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ========================
+# 4. Uploaded Files (Images)
+# ========================
+# Postman se test karte waqt jo images upload hongi, wo Git pe nahi jani chahiye
+app/static/uploads/products/*
+app/static/uploads/profiles/*
+# Lekin folder ka structure Git pe jana chahiye, isliye in folders me ek khali '.gitkeep' file bana dena
+!app/static/uploads/products/.gitkeep
+!app/static/uploads/profiles/.gitkeep
+
+# ========================
+# 5. IDE & OS Files
+# ========================
+# VS Code aur Windows/Mac ki setting files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
