@@ -81,7 +81,7 @@ def login():
     
     access_token = create_access_token(
         identity=str(user.public_id), 
-        additional_claims={"role": user.role.role_naem},
+        additional_claims={"role": user.role.role_name},
         expires_delta=timedelta(days=1)
     )
 

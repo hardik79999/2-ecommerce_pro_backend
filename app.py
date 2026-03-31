@@ -23,6 +23,9 @@ def create_app(config_class=Config):
     from shop.user.routes import user_bp
     app.register_blueprint(user_bp, url_prefix='/api/user')
 
+    from shop.admin.routes import admin_bp
+    app.register_blueprint(admin_bp, url_prefix='/api/admin')
+
     @app.route('/')
     def index():
         return {"message": "E-Commerce Backend is Running Successfully!"}, 200
