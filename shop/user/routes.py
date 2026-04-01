@@ -37,26 +37,25 @@ def get_profile():
 
 @user_bp.route('/products', methods=['GET'])
 def get_public_products():
-    """Public API to view all active products of ACTIVE sellers"""
-    
-    # MAGIC QUERY: Join User table and check BOTH product and user status
+    # MAGIC QUERY: Humne join pehle hi lagaya hua hai seller status check karne ke liye
     products = Product.query.join(User, Product.seller_id == User.id)\
         .filter(Product.is_active == True, User.is_active == True).all()
     
     result = []
     for prod in products:
+        # Har product ke specs nikal lo
+        specs = [{"key": s.spec_key, "value": s.spec_value} for s in prod.specifications if s.is_active]
+        
         primary_image = ProductImage.query.filter_by(product_id=prod.id, is_primary=True).first()
-        img_url = primary_image.image_url if primary_image else None
         
         result.append({
             "uuid": prod.uuid,
             "name": prod.name,
-            "description": prod.description,
             "price": prod.price,
             "category": prod.category.name,
             "seller": prod.seller_user.username, 
-            "primary_image": img_url,
-            "stock": prod.stock
+            "primary_image": primary_image.image_url if primary_image else None,
+            "specifications": specs # 👈 List view me bhi specs add kar diye
         })
         
     return jsonify({
@@ -294,75 +293,125 @@ def checkout(current_customer):
         return jsonify({"error": "Transaction failed", "details": str(e)}), 500
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-
 import random
 import string
-from shop.models import Payment, Invoice
+from shop.models import Payment, Invoice, Order, OrderTracking, OrderStatus, PaymentStatus, PaymentMethod # 👈 PaymentMethod import karna mat bhulna
 
 @user_bp.route('/payment', methods=['POST'])
 @customer_required
 def process_payment(current_customer):
     data = request.get_json()
     order_uuid = data.get('order_uuid')
-    payment_method = data.get('payment_method') # Options: 'cod', 'card', 'upi', 'netbanking'
+    payment_method_str = data.get('payment_method') # Postman se aayi hui string
 
-    # 1. Validation
-    if not order_uuid or not payment_method:
+    if not order_uuid or not payment_method_str:
         return jsonify({"error": "order_uuid and payment_method are required"}), 400
 
-    # 2. Find Order
+    # =========================================================================
+    # 🛡️ STRICT VALIDATION: Check if payment method is valid
+    # =========================================================================
+    valid_methods = [m.name for m in PaymentMethod] # Ye list banayega: ['cod', 'card', 'upi', 'netbanking']
+    
+    # Lowercase me convert karke check kar rahe hain taaki 'UPI', 'Upi', 'upi' sab chal jaye
+    if payment_method_str.lower() not in valid_methods:
+        return jsonify({
+            "error": "Invalid Payment Method",
+            "message": f"Aapne '{payment_method_str}' select kiya hai jo ki galat hai. Kripya allowed options me se kuch chunein.",
+            "allowed_options": valid_methods # Ye user ko options dikha dega
+        }), 400
+        
+    payment_method_clean = payment_method_str.lower()
+    # =========================================================================
+
+    # 1. Order dhundho
     order = Order.query.filter_by(uuid=order_uuid, user_id=current_customer.id).first()
     if not order:
         return jsonify({"error": "Order not found"}), 404
 
-    # Check if already paid
-    if order.status.name != 'pending':
-        return jsonify({"error": f"Order is already {order.status.name}. Cannot process payment again."}), 400
+    # =========================================================================
+    # 🛡️ DOUBLE PAYMENT PREVENTION LOGIC
+    # =========================================================================
+    # Check 1: Agar order 'pending' nahi hai (yani processing, shipped ya delivered hai)
+    if order.status != OrderStatus.pending:
+        return jsonify({
+            "error": "Payment Already Completed",
+            "message": f"Payment for this order has already been made (Current Status: {order.status.name.capitalize()}). There is no need to make a payment again."
+        }), 400
+
+    # Check 2: Database mein directly Payment table check karo (Extra Safety)
+    existing_payment = Payment.query.filter_by(order_id=order.id, status=PaymentStatus.completed).first()
+    if existing_payment:
+        return jsonify({
+            "error": "Payment Already Completed",
+            "message": f"Is order ka payment system mein already darj hai (TXN ID: {existing_payment.transaction_id})."
+        }), 400
+    # =========================================================================
+
+    if order.status == OrderStatus.processing:
+        return jsonify({"error": "Order is already paid and being processed"}), 400
 
     try:
-        # 3. Simulate Transaction Logic
-        # Agar COD hai toh payment pending rahegi, warna completed
-        payment_status = 'pending' if payment_method == 'cod' else 'completed'
+        # --- TRANSACTION START ---
         
-        # Ek fake transaction ID banate hain (sirf online payments ke liye)
+        # 2. Payment Record Create Karo
         txn_id = "TXN-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=10))
+        payment_status = PaymentStatus.completed 
         
         new_payment = Payment(
             order_id=order.id,
             user_id=current_customer.id,
-            transaction_id=txn_id if payment_method != 'cod' else None,
-            payment_method=payment_method,
+            transaction_id=txn_id if payment_method_clean != 'cod' else None,
+            payment_method=payment_method_clean, # 👈 Cleaned string yahan use ki hai
             amount=order.total_amount,
-            status=payment_status
+            status=payment_status,
+            created_by=current_customer.id, 
+            updated_by=current_customer.id,
+            is_active=True
         )
         db.session.add(new_payment)
 
-        # 4. Update Order Status
-        # Ab order confirm ho gaya hai, toh processing mein daal do
-        order.status = 'processing'
+        # 3. Order Table Update 
+        order.status = OrderStatus.processing
+        order.updated_by = current_customer.id
 
-        # 5. Generate Invoice
-        inv_number = f"INV-2026-{order.id}-{''.join(random.choices(string.digits, k=4))}"
+        # 4. ORDER TRACKING 
+        new_tracking = OrderTracking(
+            order_id=order.id,
+            status=OrderStatus.processing,
+            message=f"Payment via {payment_method_clean.upper()} Successful. Your order is now being processed.",
+            created_by=current_customer.id,
+            updated_by=current_customer.id,
+            is_active=True
+        )
+        db.session.add(new_tracking)
+
+        # 5. Invoice Generate Karo
+        inv_number = f"INV-{order.id}-{random.randint(1000, 9999)}"
         new_invoice = Invoice(
             order_id=order.id,
-            invoice_number=inv_number
+            invoice_number=inv_number,
+            created_by=current_customer.id,
+            updated_by=current_customer.id,
+            is_active=True
         )
         db.session.add(new_invoice)
 
-        # Commit sab kuch ek sath
         db.session.commit()
+        # --- TRANSACTION END ---
 
         return jsonify({
-            "message": "Payment processed successfully!",
-            "transaction_id": txn_id if payment_method != 'cod' else "N/A",
-            "payment_status": payment_status,
-            "order_status": order.status.name,
-            "invoice_number": inv_number
+            "message": "Payment Successful! Order tracking is now active.",
+            "data": {
+                "order_status": order.status.name,
+                "transaction_id": txn_id if payment_method_clean != 'cod' else "N/A",
+                "invoice_number": inv_number,
+                "payment_method": payment_method_clean
+            }
         }), 200
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({"error": "Payment simulation failed", "details": str(e)}), 500
+        return jsonify({"error": "Payment failed", "details": str(e)}), 500
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
