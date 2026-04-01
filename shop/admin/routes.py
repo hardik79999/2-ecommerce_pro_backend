@@ -192,3 +192,67 @@ def update_order_status(order_uuid):
     except Exception as e:
         db.session.rollback()
         return jsonify({"error": "Failed to update status", "details": str(e)}), 500
+    
+
+
+
+#=================================================================================================================
+#=================================================================================================================
+
+from shop.models import SellerCategory
+
+@admin_bp.route('/category-requests', methods=['GET'])
+@admin_required
+def get_all_category_requests():
+    # Saari pending requests lao (is_approved == False)
+    pending_requests = SellerCategory.query.filter_by(is_approved=False, is_active=True).all()
+    
+    result = []
+    for req in pending_requests:
+        # Note: Model me backrefs set hone chahiye properly
+        seller_name = User.query.get(req.seller_id).username
+        category_name = Category.query.get(req.category_id).name
+        
+        result.append({
+            "request_uuid": req.uuid,
+            "seller_name": seller_name,
+            "category_name": category_name,
+            "requested_at": req.created_at.strftime("%Y-%m-%d %H:%M:%S")
+        })
+        
+    return jsonify({"total_pending": len(result), "requests": result}), 200
+
+
+@admin_bp.route('/category-request/<request_uuid>/approve', methods=['PUT'])
+@admin_required
+def approve_seller_category(request_uuid):
+    # Request dhundo
+    category_req = SellerCategory.query.filter_by(uuid=request_uuid).first()
+    
+    if not category_req:
+        return jsonify({"error": "Request not found"}), 404
+        
+    if category_req.is_approved:
+        return jsonify({"message": "This request is already approved."}), 400
+        
+    try:
+        # Admin ne approve kar diya
+        category_req.is_approved = True
+        
+        # Admin ki ID (optional, agar tum updated_by Admin karna chaho)
+        current_admin_uuid = get_jwt_identity()
+        admin = User.query.filter_by(uuid=current_admin_uuid).first()
+        category_req.updated_by = admin.id
+        
+        db.session.commit()
+        
+        seller = User.query.get(category_req.seller_id)
+        category = Category.query.get(category_req.category_id)
+        
+        return jsonify({
+            "message": f"Success! Seller '{seller.username}' is now approved to sell in '{category.name}'."
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": "Failed to approve request", "details": str(e)}), 500

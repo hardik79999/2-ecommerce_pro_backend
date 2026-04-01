@@ -56,6 +56,22 @@ def create_product(current_seller):
     category = Category.query.filter_by(uuid=category_uuid, is_active=True).first()
     if not category:
         return jsonify({"error": "Invalid or inactive category"}), 404
+    
+    # =========================================================================
+    # 🛡️ GATED CATEGORY CHECK (NAYA LOGIC)
+    # =========================================================================
+    is_approved_seller = SellerCategory.query.filter_by(
+        seller_id=current_seller.id,
+        category_id=category.id,
+        is_approved=True,
+        is_active=True
+    ).first()
+
+    if not is_approved_seller:
+        return jsonify({
+            "error": "Category Approval Required",
+            "message": f"Aap '{category.name}' category mein product nahi daal sakte. Pehle Admin se approval lijiye."
+        }), 403
 
     # 3. Handle MULTIPLE File Uploads
     image_files = request.files.getlist('images')
