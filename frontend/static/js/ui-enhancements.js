@@ -543,39 +543,12 @@
         setSubmitButtonState(event.target, true, 'Placing order');
 
         try {
-            if (!window.isCustomerSession()) {
-                window.showToast('Only customers can complete payment', 'error');
+            if (typeof window.handlePaymentWithOtp === 'function') {
+                await window.handlePaymentWithOtp(event);
                 return;
             }
 
-            if (!AppState.selectedAddress) {
-                window.showToast('Please select or add an address first', 'warning');
-                return;
-            }
-
-            const checkoutResponse = await API.checkout(AppState.selectedAddress);
-            if (!checkoutResponse) return;
-
-            const paymentMethod = document.querySelector('input[name="payment_method"]:checked')?.value;
-            if (!paymentMethod) {
-                window.showToast('Please select a payment method', 'warning');
-                return;
-            }
-
-            const orderUuid = checkoutResponse.order_uuid;
-            AppState.currentOrder = orderUuid;
-
-            const paymentResponse = await API.processPayment(orderUuid, paymentMethod);
-            if (!paymentResponse) return;
-
-            await window.syncCustomerCart();
-            AppState.selectedAddress = null;
-            window.showPaymentSuccessNotification(orderUuid, paymentResponse.email_status);
-            ui.renderCheckoutSummary();
-            setTimeout(() => {
-                window.closeAppModal();
-                window.navigateTo(`#order-tracking/${orderUuid}`);
-            }, 2000);
+            window.showToast('Checkout payment handler is unavailable. Please refresh and try again.', 'error');
         } finally {
             setSubmitButtonState(event.target, false);
         }

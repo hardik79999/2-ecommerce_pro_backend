@@ -728,7 +728,7 @@
                             <span class="checkout-helper-copy">Pick a secure payment path and place the order.</span>
                         </div>
 
-                        <form id="payment-form" onsubmit="handlePayment(event)">
+                        <form id="payment-form" onsubmit="window.handlePayment(event)">
                             <div class="payment-option-grid mb-6">
                                 <label class="payment-option-card is-selected">
                                     <input type="radio" name="payment_method" value="cod" checked class="payment-option-input">
@@ -814,7 +814,7 @@
                     <!-- Payment Method Section (shown after address selection) -->
                     <div id="payment-section-legacy" class="bg-white rounded-lg shadow p-6 hidden surface-card">
                         <h3 class="text-xl font-bold text-gray-900 mb-4">Payment Method</h3>
-                        <form onsubmit="handlePayment(event)">
+                        <form onsubmit="window.handlePayment(event)">
                             <div class="space-y-3 mb-6">
                                 <label class="flex items-center p-4 border-2 border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50">
                                     <input type="radio" name="payment_method" value="cod" checked class="mr-3">
@@ -852,7 +852,7 @@
 
         <!-- Order Tracking Page -->
         <section id="order-tracking" class="page-section hidden">
-            <button onclick="navigateTo('#profile')" class="mb-6 px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition">← Back to Profile</button>
+            <button id="tracking-back-button" onclick="navigateTo('#profile')" class="mb-6 px-4 py-2 bg-gray-200 text-gray-900 rounded-lg hover:bg-gray-300 transition">Back to Profile</button>
             
             <div class="bg-white rounded-lg shadow-lg p-8 surface-card tracking-shell">
                 <div class="flex flex-col gap-2 mb-8">

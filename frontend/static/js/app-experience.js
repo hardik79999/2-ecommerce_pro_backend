@@ -404,7 +404,11 @@
             targetKey = 'cart';
         }
 
-        if (targetKey === 'order-tracking' || targetKey === 'orders') {
+        if (targetKey === 'order-tracking') {
+            targetKey = AppState.user?.role === 'admin' ? 'admin-dash' : 'profile';
+        }
+
+        if (targetKey === 'orders') {
             targetKey = 'profile';
         }
 

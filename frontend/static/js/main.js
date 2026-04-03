@@ -591,6 +591,7 @@ window.closePaymentOtpModal = closePaymentOtpModal;
 window.resendPaymentOtp = resendPaymentOtp;
 window.verifyPaymentOtp = verifyPaymentOtp;
 window.reopenPendingPaymentOtp = reopenPendingPaymentOtp;
+window.handlePaymentWithOtp = handlePaymentWithOtp;
 window.handlePayment = handlePaymentWithOtp;
 
 async function hydrateLocalCartToBackend() {
@@ -1297,11 +1298,20 @@ function router() {
             return;
     }
 
-    if (page === 'order-tracking' || page === 'orders') {
+    if (page === 'orders') {
         if (role !== 'customer') {
             showToast('Access denied: This page is for customers only', 'error');
             if (role === 'seller') navigateTo('#seller-dash');
             else if (role === 'admin') navigateTo('#admin-dash');
+            else navigateTo('#home');
+            return;
+        }
+    }
+
+    if (page === 'order-tracking') {
+        if (!['customer', 'admin'].includes(role)) {
+            showToast('Access denied: This page is for customers and admins only', 'error');
+            if (role === 'seller') navigateTo('#seller-dash');
             else navigateTo('#home');
             return;
         }
@@ -3110,19 +3120,29 @@ async function loadProfileWithFallback() {
 }
 
 async function loadOrderTracking(orderUuid) {
+    const isAdminViewer = AppState.user?.role === 'admin';
+    const trackingBackTarget = isAdminViewer ? '#admin-dash' : '#profile';
+    const trackingBackLabel = isAdminViewer ? 'Back to Admin Dashboard' : 'Back to Profile';
+    const trackingBackButton = document.getElementById('tracking-back-button');
+
+    if (trackingBackButton) {
+        trackingBackButton.textContent = trackingBackLabel;
+        trackingBackButton.setAttribute('onclick', `navigateTo('${trackingBackTarget}')`);
+    }
+
     if (!orderUuid) {
         showToast('Invalid order', 'error');
-        navigateTo('#profile');
+        navigateTo(trackingBackTarget);
         return;
     }
 
-    const trackingResponse = AppState.user?.role === 'admin'
+    const trackingResponse = isAdminViewer
         ? await API.call(`/admin/order/${orderUuid}/track`, 'GET')
         : await API.trackOrder(orderUuid);
 
     if (!trackingResponse) {
         showToast('Failed to load order tracking', 'error');
-        navigateTo('#profile');
+        navigateTo(trackingBackTarget);
         return;
     }
 
